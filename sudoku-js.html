@@ -1,16 +1,14 @@
-#!/usr/bin/env -S deno run --allow-env
 
-console.log(`
 <html>
 <head>
 <meta name="robots" content="noindex,nofollow">
 </head>
 <body>
-`);
+<script>
 
 const script = "sudoku.html";  //   my $script = $ENV{SCRIPT_NAME}; $script =~ s/.*\///;
 const blank = ".................................................................................";
-const givensString = ((Deno.env.get('QUERY_STRING') ?? "") + blank).substr(0, 81);
+const givensString = (location.search.replace('?','') + blank).substr(0, 81);
 const givens = Array.from(givensString);
 const choices = Array.from({length:81}).map(_=>"123456789");
 
@@ -107,7 +105,7 @@ function choicesFn(i) {
         return `\n<font color=gray size=-1>${digit}</font>`;
       } else {
         let search = nextGivens(i, digit);
-        return `\n<a href="${script}?${search}">${digit}</a>`;
+        return `\n<a href="?${search}">${digit}</a>`;
       }
     }).join("");
 }
@@ -120,12 +118,12 @@ for (let i=0; i <= 80; i++) {
   board = board.replace('X', content);
 }
 
-console.log(`
+</script>
   <style>
    a         {text-decoration: none;}
   </style>
   <center><br>
-    ${board}
+    <div id=output></div>
     <font color=gray><br><br>
       About Sudokant, the Sudoku Servant
       <br><table width=400><tr><td><font color=gray>
@@ -141,11 +139,15 @@ console.log(`
         find these most interesting places in the hardest puzzles without becomming a
         mechanical master of the simpler logic.
         <br><br>Each step has a unique url that you can bookmark or send to
-        friends. Use this <a href=${script}?${blank}>blank page</a> to enter new puzzles.
+        friends. Use this <a href=?>blank page</a> to enter new puzzles.
         Contribute your insights and most diabolical puzzles to the
         <a href=http://c2.com/cgi/wiki?SuDoku>SuDoku</a> page on my wiki.
       </table><br>
       <font color=gray size=-1>
         &copy;2005 Ward Cunningham
         &copy;2020 Ward Cunningham, Joshua Benuck, Eric Dobbs, Beth Long
-`);
+<script>
+  output.innerHTML = board
+</script>
+</body>
+</html>
