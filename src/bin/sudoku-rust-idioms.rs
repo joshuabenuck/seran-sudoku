@@ -7,11 +7,36 @@ enum Value {
     Given(char),
 }
 
+impl Value {
+    fn choices_mut(&mut self) -> Option<&mut HashSet<char>> {
+        match self {
+            Value::Choices(c) => Some(c),
+            _ => None,
+        }
+    }
+
+    fn choices(&self) -> Option<&HashSet<char>> {
+        match self {
+            Value::Choices(c) => Some(c),
+            _ => None,
+        }
+    }
+
+    fn given(&self) -> Option<char> {
+        match self {
+            Value::Given(g) => Some(*g),
+            _ => None,
+        }
+    }
+}
+
 impl Default for Value {
     fn default() -> Value {
         Value::Choices("123456789".chars().into_iter().collect())
     }
 }
+
+trait Rule {}
 
 struct Board {
     values: Vec<Value>,
@@ -100,44 +125,89 @@ fn main() {
     // remove choices eliminated by the at-most-one rule
     for subset in subsets.iter() {
         for i in subset {
-            let d = match board.values[*i] {
-                Value::Given(given) => given,
-                Value::Choices(_) => continue,
-            };
-
-            for j in subset {
-                match &mut board.values[*j] {
-                    Value::Given(_) => continue,
-                    Value::Choices(choices) => choices.remove(&d),
-                };
+            if let Some(d) = board.values[*i].given() {
+                for j in subset {
+                    if let Some(choices) = board.values[*j].choices_mut() {
+                        choices.remove(&d);
+                    };
+                }
             }
+        }
+    }
+
+    struct UniqueRule {
+        matches: HashMap<char, Matches>,
+    }
+
+    impl UniqueRule {
+        fn new() -> Self {
+            Self {
+                matches: HashMap::new(),
+            }
+        }
+
+        fn add(&mut self, digit: char, index: usize) {
+            let entry = self.matches.entry(digit).or_insert(Matches {
+                digit,
+                indexes: Vec::new(),
+            });
+            entry.add(digit, index);
+        }
+
+        fn uniques(&self) -> Vec<(char, usize)> {
+            self.matches
+                .iter()
+                .filter(|(_, m)| m.indexes.len() == 1)
+                .map(|(k, v)| (*k, v.indexes[0]))
+                .collect()
+        }
+    }
+    struct Matches {
+        digit: char,
+        indexes: Vec<usize>,
+    }
+
+    impl Matches {
+        fn add(&mut self, digit: char, index: usize) {
+            self.digit = digit;
+            self.indexes.push(index);
         }
     }
 
     // identify choices mandated by the at-least-one rule
     let mut unique = HashMap::new();
     for subset in subsets.iter() {
-        let mut counts = [0; 10];
-        let mut where_ = [None; 10];
+        let mut unique_rule = UniqueRule::new();
         for i in subset.into_iter() {
-            match &board.values[*i] {
-                Value::Given(_) => continue,
-                Value::Choices(digits) => {
-                    for d in digits {
-                        let d = d.to_digit(10).unwrap() as usize;
-                        counts[d] = counts[d] + 1;
-                        where_[d] = Some(*i);
-                    }
+            if let Some(digits) = &board.values[*i].choices() {
+                for d in *digits {
+                    unique_rule.add(*d, *i);
                 }
             }
         }
-        for d in 1..10 {
-            if counts[d] != 1 {
-                continue;
-            }
-            if let Some(w) = where_[d] {
-                unique.insert(w, std::char::from_digit(d as u32, 10).unwrap());
-            }
+
+        // let indexes = subset
+        //     .into_iter()
+        //     .map(|i| (i, board.values[*i]))
+        //     .filter_map(|(i, cs)| match cs.choices() {
+        //         Some(cs) => Some((i, cs)),
+        //         None => None,
+        //     })
+        //     .flat_map(|(i, cs)| cs.into_iter().map(|c| (c, i)))
+        //     .group_by(|(c, i)| c);
+        // let mut counts = [0; 10];
+        // let mut where_ = Vec::new();
+        // for i in subset.into_iter() {
+        //     if let Some(digits) = &board.values[*i].choices() {
+        //         for d in *digits {
+        //             let d = d.to_digit(10).unwrap() as usize;
+        //             counts[d] = counts[d] + 1;
+        //             where_[d] = Some(*i);
+        //         }
+        //     }
+        // }
+        for (c, i) in unique_rule.uniques() {
+            unique.insert(i, c);
         }
     }
 
