@@ -1,33 +1,37 @@
-use std::collections::{HashMap, HashSet};
 use std::env;
 
+#[derive(Clone, PartialEq)]
 enum Rule {
     AtMostOne,
     AtLeastOne,
 }
 
+#[derive(Clone)]
 struct Choice {
     digit: char,
     reason: Option<Rule>,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 enum Value {
-    Choices(HashSet<char>),
+    Choices(Vec<Choice>),
     Given(char),
 }
 
 impl Value {
-    fn choices_mut(&mut self) -> Option<&mut HashSet<char>> {
+    fn choices(&self) -> Option<Vec<char>> {
         match self {
-            Value::Choices(c) => Some(c),
-            _ => None,
-        }
-    }
-
-    fn choices(&self) -> Option<&HashSet<char>> {
-        match self {
-            Value::Choices(c) => Some(c),
+            Value::Choices(cs) => Some(
+                cs.iter()
+                    .filter_map(|c| {
+                        if c.reason.is_none() {
+                            Some(c.digit)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect(),
+            ),
             _ => None,
         }
     }
@@ -39,16 +43,42 @@ impl Value {
         }
     }
 
-    fn eliminate(&mut self, digit: char) {
-        if let Value::Choices(cs) = self {
-            cs.remove(&digit);
+    fn eliminate(&mut self, digit: char, rule: Rule) {
+        if let Value::Choices(ref mut cs) = self {
+            let index = cs
+                .iter()
+                .enumerate()
+                .filter(|(_i, c)| c.reason.is_none())
+                .fold(None, |a, (i, c)| if c.digit == digit { Some(i) } else { a });
+            if index.is_some() {
+                cs[index.unwrap()].reason = Some(rule);
+            }
+        }
+    }
+
+    fn keep(&mut self, digit: char, rule: Rule) {
+        if let Value::Choices(ref mut cs) = self {
+            for choice in cs {
+                if choice.reason.is_none() && choice.digit != digit {
+                    choice.reason = Some(rule.clone());
+                }
+            }
         }
     }
 }
 
 impl Default for Value {
     fn default() -> Value {
-        Value::Choices("123456789".chars().into_iter().collect())
+        Value::Choices(
+            "123456789"
+                .chars()
+                .into_iter()
+                .map(|d| Choice {
+                    digit: d,
+                    reason: None,
+                })
+                .collect(),
+        )
     }
 }
 
@@ -81,15 +111,15 @@ impl Board {
                 Some(v) => Some((u, v)),
                 None => None,
             })
-            .filter_map(move |(u, c)| match c.get(&digit) {
-                Some(_) => Some(u),
-                None => None,
+            .filter_map(move |(u, c)| match c.binary_search(&digit) {
+                Ok(_) => Some(u),
+                Err(_) => None,
             })
     }
 
-    fn eliminate(&mut self, indexes: Vec<usize>, digit: char) {
+    fn eliminate(&mut self, indexes: Vec<usize>, digit: char, rule: Rule) {
         for index in indexes {
-            self.values[index].eliminate(digit);
+            self.values[index].eliminate(digit, rule.clone());
         }
     }
 
@@ -165,24 +195,20 @@ fn main() {
         for i in subset {
             if let Some(d) = board.values[*i].given() {
                 let indexes = board.indexes_of(&subset, d).collect();
-                board.eliminate(indexes, d);
+                board.eliminate(indexes, d, Rule::AtMostOne);
             }
         }
     }
 
     // identify choices mandated by the at-least-one rule
-    let mut unique = HashMap::new();
     for subset in subsets.iter() {
         for digit in "0123456789".chars() {
             let mut indexes = board.indexes_of(&subset, digit);
             let possibly_unique = indexes.next();
             if possibly_unique.is_some() && indexes.next().is_none() {
-                unique.insert(possibly_unique.unwrap(), digit);
-                // drop(indexes);
-                // let value = &mut board.values[possibly_unique.unwrap()];
-                // if let Value::Choices(_c) = value {
-                //     std::mem::replace(value, Value::Given(digit));
-                // }
+                drop(indexes);
+                let possibly_unique = possibly_unique.unwrap();
+                board.values[possibly_unique].keep(digit, Rule::AtLeastOne);
             }
         }
     }
@@ -201,20 +227,23 @@ fn main() {
 
     let mut b = table(table("X".to_string()));
     for (i, value) in board.values.iter().enumerate() {
-        let unique_choice = unique.get(&i);
         let content = match value {
             Value::Given(given) => format!("<font size=8>{}", given),
             Value::Choices(choices) => choices
                 .iter()
-                // TODO: sort digits...
-                .map(|digit| {
-                    if unique_choice.is_some() && *digit != *unique_choice.unwrap() {
-                        format!("\n<font color=gray size=-1>{}</font>", digit)
-                    } else {
+                .map(|choice| match choice.reason {
+                    Some(Rule::AtLeastOne) => {
+                        format!("\n<font color=gray size=-1>{}</font>", choice.digit)
+                    }
+                    Some(Rule::AtMostOne) => {
+                        //format!("\n<font color=#77bbff size=-1>{}</font>", choice.digit)
+                        format!("")
+                    }
+                    _ => {
                         let mut search = board.givens();
-                        search[i] = *digit;
+                        search[i] = choice.digit;
                         let g: String = search.iter().collect();
-                        format!("\n<a href=\"{}?{}\">{}</a>", script, g, digit)
+                        format!("\n<a href=\"{}?{}\">{}</a>", script, g, choice.digit)
                     }
                 })
                 .collect(),
