@@ -14,7 +14,7 @@ fn main() {
 "#
     );
 
-    let script = "test.html"; //   my $script = $ENV{SCRIPT_NAME}; $script =~ s/.*\///;
+    let script = "sudoku-rust-port.html"; //   my $script = $ENV{SCRIPT_NAME}; $script =~ s/.*\///;
     let blank = ".................................................................................";
     let givens_string: String = env::var("QUERY_STRING").unwrap_or_default() + blank;
     let givens: Vec<char> = givens_string.chars().into_iter().take(81).collect();
