@@ -37,6 +37,18 @@ impl Value {
         }
     }
 
+    fn count(&self, rule: &Rule) -> usize {
+        if let Value::Choices(choices) = self {
+            return choices.iter().fold(0, |a, c| {
+                if c.reason.is_some() && c.reason.as_ref().unwrap() == rule {
+                    return a + 1;
+                }
+                a
+            });
+        }
+        0
+    }
+
     fn given(&self) -> Option<char> {
         match self {
             Value::Given(g) => Some(*g),
@@ -106,6 +118,10 @@ impl Board {
 
     fn choose(&mut self, i: usize, choice: char) {
         self.values[i] = Value::Given(choice)
+    }
+
+    fn count(&self, rule: &Rule) -> usize {
+        self.values.iter().fold(0, |a, v| a + v.count(rule))
     }
 
     fn indexes_of<'a>(
@@ -321,7 +337,7 @@ fn terminal(board: &mut Board) {
         print!("{} ", rows.next().unwrap());
         for (j, col) in row.iter().enumerate() {
             match &board.values[*col] {
-                Value::Choices(choices) => {
+                Value::Choices(_choices) => {
                     print!("?");
                 }
                 Value::Given(choice) => {
@@ -347,6 +363,7 @@ fn main() {
                 .short("t")
                 .takes_value(true),
         )
+        .arg(Arg::with_name("solve").long("solve").short("solve"))
         .get_matches();
 
     let mut board = Board::new();
@@ -354,7 +371,31 @@ fn main() {
     if matches.is_present("terminal") {
         let givens = matches.value_of("terminal").unwrap();
         board.choose_all(&givens);
-        board.solve();
+        if matches.is_present("solve") {
+            let mut count_rule1 = board.count(&Rule::AtMostOne);
+            let mut count_rule2 = board.count(&Rule::AtLeastOne);
+            for _ in 0..10 {
+                let decided: Vec<&mut Value> = board
+                    .values
+                    .iter_mut()
+                    .filter(|v| v.choices().is_some())
+                    .filter(|v| v.choices().unwrap().len() == 1)
+                    .collect();
+                for value in decided {
+                    let digit = value.choices().unwrap()[0];
+                    std::mem::replace(value, Value::Given(digit));
+                }
+                board.solve();
+                count_rule1 = board.count(&Rule::AtMostOne);
+                count_rule2 = board.count(&Rule::AtLeastOne);
+                println!("{} {}", count_rule1, count_rule2);
+                if count_rule1 == 0 && count_rule2 == 0 {
+                    break;
+                }
+            }
+        } else {
+            board.solve();
+        }
         terminal(&mut board);
     } else {
         html(&mut board);
