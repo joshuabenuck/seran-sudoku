@@ -207,7 +207,7 @@ impl Board {
         [self.rows(), self.cols(), self.squares()].concat()
     }
 
-    fn solve(&mut self) {
+    fn eval(&mut self) {
         // remove choices eliminated by the at-most-one rule
         for subset in self.subsets().iter() {
             for i in subset {
@@ -231,12 +231,33 @@ impl Board {
             }
         }
     }
+    fn solve(&mut self) {
+        let mut count_rule1;
+        let mut count_rule2;
+        for _ in 0..10 {
+            let decided: Vec<&mut Value> = self
+                .values
+                .iter_mut()
+                .filter(|v| v.choices().is_some())
+                .filter(|v| v.choices().unwrap().len() == 1)
+                .collect();
+            for value in decided {
+                let digit = value.choices().unwrap()[0];
+                std::mem::replace(value, Value::Given(digit));
+            }
+            self.eval();
+            count_rule1 = self.count(&Rule::AtMostOne);
+            count_rule2 = self.count(&Rule::AtLeastOne);
+            println!("{} {}", count_rule1, count_rule2);
+            if count_rule1 == 0 && count_rule2 == 0 {
+                break;
+            }
+        }
+    }
 }
 
-fn html(board: &mut Board) {
+fn html(board: &Board) {
     let script = "sudoku-rust-idioms.html"; //   my $script = $ENV{SCRIPT_NAME}; $script =~ s/.*\///;
-    board.choose_all(&env::var("QUERY_STRING").unwrap_or_default());
-    board.solve();
 
     println!(
         r#"
@@ -322,7 +343,7 @@ fn html(board: &mut Board) {
     );
 }
 
-fn terminal(board: &mut Board) {
+fn terminal(board: &Board) {
     let mut rows = "123456789".chars();
     let cols = "123456789".chars();
     print!("  ");
@@ -368,36 +389,16 @@ fn main() {
 
     let mut board = Board::new();
 
-    if matches.is_present("terminal") {
-        let givens = matches.value_of("terminal").unwrap();
-        board.choose_all(&givens);
-        if matches.is_present("solve") {
-            let mut count_rule1 = board.count(&Rule::AtMostOne);
-            let mut count_rule2 = board.count(&Rule::AtLeastOne);
-            for _ in 0..10 {
-                let decided: Vec<&mut Value> = board
-                    .values
-                    .iter_mut()
-                    .filter(|v| v.choices().is_some())
-                    .filter(|v| v.choices().unwrap().len() == 1)
-                    .collect();
-                for value in decided {
-                    let digit = value.choices().unwrap()[0];
-                    std::mem::replace(value, Value::Given(digit));
-                }
-                board.solve();
-                count_rule1 = board.count(&Rule::AtMostOne);
-                count_rule2 = board.count(&Rule::AtLeastOne);
-                println!("{} {}", count_rule1, count_rule2);
-                if count_rule1 == 0 && count_rule2 == 0 {
-                    break;
-                }
-            }
-        } else {
-            board.solve();
-        }
-        terminal(&mut board);
+    let (givens, present): (String, fn(&Board)) = if matches.is_present("terminal") {
+        (matches.value_of("terminal").unwrap().to_owned(), terminal)
     } else {
-        html(&mut board);
+        (env::var("QUERY_STRING").unwrap_or_default(), html)
+    };
+    board.choose_all(&givens);
+    if matches.is_present("solve") {
+        board.solve();
+    } else {
+        board.eval();
     }
+    present(&board);
 }
